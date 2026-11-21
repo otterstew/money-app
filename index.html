@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Money</title>
+<meta name="description" content="Stewart and Trisha's household money: accounts, buckets, receipts and the French gîtes.">
+<meta name="theme-color" content="#0b6e4f">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700;800&family=Spline+Sans+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="design/money.css">
+<style>
+/* App CSS after the Tally block: layout only, every value from a token. */
+.m-filters{display:grid;gap:var(--s2);grid-template-columns:minmax(0,1fr) minmax(0,1fr);margin-bottom:var(--s4)}
+.m-filters .m-search{grid-column:1/-1}
+@media (min-width:900px){.m-filters{grid-template-columns:2fr repeat(4,minmax(0,1fr))}.m-filters .m-search{grid-column:auto}}
+.m-month{display:flex;align-items:center;gap:var(--s1)}
+.m-month strong{min-width:9.5em;text-align:center}
+.m-review{display:grid;gap:var(--s3)}
+.m-review .t-panel{display:grid;gap:var(--s3)}
+.m-review-top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s3);align-items:start}
+.m-review-fields{display:grid;gap:var(--s3);grid-template-columns:minmax(0,1fr)}
+@media (min-width:720px){.m-review-fields{grid-template-columns:2fr 1fr 1fr}}
+.m-assign{width:110px}
+.m-lines{display:grid;gap:var(--s2)}
+.m-line{display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:var(--s2)}
+.m-line .t-select{grid-column:1/-1}
+@media (min-width:600px){.m-line{grid-template-columns:minmax(0,2fr) 96px minmax(0,1.4fr) minmax(0,1fr)}.m-line .t-select{grid-column:auto}}
+.m-kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s2) var(--s4);font-size:var(--t-sm)}
+.m-kv dt{color:var(--ink-3)} .m-kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.m-chartbox{position:relative}
+.m-top-gap{margin-top:var(--s4)}
+.m-split{display:flex;flex-wrap:wrap;gap:var(--s4) var(--s8)}
+</style>
+</head>
+<body>
+<div class="t-shell">
+  <nav class="t-rail" id="rail" aria-label="Sections"></nav>
+  <main class="t-main" id="main" tabindex="-1"><div class="t-skel" style="width:40%;height:28px"></div></main>
+</div>
+<nav class="t-tabs" id="tabs" aria-label="Sections"></nav>
+<div class="t-scrim" id="scrim"></div>
+<aside class="t-sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"></aside>
+<div class="t-toast" id="toast" role="status" aria-live="polite"></div>
+<div class="t-tip" id="tip" aria-hidden="true"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
