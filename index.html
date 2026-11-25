@@ -42,6 +42,9 @@
 .m-split4{display:grid;gap:var(--s4) var(--s6);grid-template-columns:repeat(2,minmax(0,1fr))}
 @media (min-width:900px){.m-split4{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .m-split4 .t-value{overflow-wrap:anywhere}
+/* Heading over its note on a phone, side by side when there is room. */
+.m-inout .t-panel-head{flex-wrap:wrap;gap:var(--s1) var(--s3)}
+.m-inout .t-panel-head h2{flex:1 1 12em}
 .m-proj{display:grid;gap:var(--s4)}
 .m-proj .t-panel-head{flex-wrap:wrap;gap:var(--s2) var(--s3)}
 .m-proj .t-panel-head>div:first-child{flex:1 1 14em;min-width:0}

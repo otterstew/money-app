@@ -8,7 +8,7 @@ import { classify, ruleFromTransaction } from './lib/rules.js';
 import { findTransferPairs } from './lib/transfers.js';
 import { budgetMonth, bucketState } from './lib/buckets.js';
 import { matchReceipt, splitsFromReceipt, receiptCheck } from './lib/receipts.js';
-import { balances, byOwner, pacing, spendByBucket, businessByMonth, budgetBase, heldForOthers, spendingSplit } from './lib/summary.js';
+import { balances, byOwner, pacing, spendByBucket, businessByMonth, budgetBase, heldForOthers, spendingSplit, moneyIn } from './lib/summary.js';
 import { projectReport } from './lib/projects.js';
 import { PEOPLE, SCOPES } from './lib/seed.js';
 import * as store from './lib/store.js';
@@ -112,8 +112,6 @@ function overview() {
   const rate = latestRate(L.settings.rates, 'EUR');
   const flagged = b.rows.filter((r) => ['over', 'under'].includes(bucketState(r))).sort((a, c) => a.available - c.available).slice(0, 6);
   const proj = L.projects.filter((p) => !p.done).map((p) => projectReport(p, L.txns, fxo()));
-  const fr = businessByMonth(L.txns, ui.month.slice(0, 4), { ...fx, mode: 'day' });
-  const frIn = fr.reduce((s, r) => s + r.in, 0), frOut = fr.reduce((s, r) => s + r.out, 0);
   // The two banks side by side (Stewart, 25 Nov 2026): sterling at NatWest, and
   // the French accounts in pounds so the two can be read together.
   const gbpAcc = bal.rows.filter((r) => r.account.currency === 'GBP'), eurAcc = bal.rows.filter((r) => r.account.currency !== 'GBP');
@@ -126,6 +124,9 @@ function overview() {
   // Where the month's money went (Stewart, 25 Nov 2026): Jersey living and
   // holidays make the headline; renovations and the gîtes sit beside them.
   const split = spendingSplit(L.txns, L.buckets, ui.month, fx), mon = monthName(ui.month).split(' ')[0];
+  // Money in, the other side of it (Stewart, 25 Nov 2026). The gîtes' yearly
+  // figures live in the bookings app, so the Overview shows only this month.
+  const inc = moneyIn(L.txns, L.accounts, L.buckets, ui.month, { ...fx, mode: 'day' });
   const part = (label, v, note, href, link) => `<div class="t-stat"><span class="t-small t-muted">${label}</span><span class="t-value">${gbpStr(v)}</span><span class="t-xs t-faint">${note}</span>${href ? `<a class="t-xs" href="${href}">${link}</a>` : ''}</div>`;
   const joint = L.settings.jointView === 'half';
   const ow = joint ? { stewart: owners.stewart + owners.joint / 2, trisha: owners.trisha + owners.joint / 2 } : owners;
@@ -141,7 +142,14 @@ function overview() {
     <section class="t-panel t-hero"><span class="t-label">Sterling accounts</span><span class="t-value">${gbpStr(sum(gbpCash, 'native') - held)}</span><span class="t-sub">NatWest, ${gbpCash.length} account${gbpCash.length === 1 ? '' : 's'}${held > 0 ? `, less ${gbpStr(held)} held for our daughter` : ''}. The loan isn’t counted.</span></section>
     <section class="t-panel t-hero"><span class="t-label">French accounts in pounds</span><span class="t-value">${gbpStr(sum(eurAcc, 'gbp'))}</span><span class="t-sub">${eurAcc.length ? `CMB, ${fmt(sum(eurAcc, 'native'), 'EUR')} at the same rate. Not in Ready to assign until it moves to NatWest.` : 'No French accounts yet.'}${eurUnset ? ` <a href="#settings">${eurUnset === 1 ? 'One balance is' : `${eurUnset} balances are`} not set yet</a>, so this is only the lines brought in.` : ''}</span></section>
   </div>
-  <section class="t-panel m-top-gap"><div class="t-panel-head"><h2>Where ${mon}’s money went</h2><span class="t-small t-muted">In pounds, refunds taken off</span></div>
+  <section class="t-panel m-top-gap m-inout"><div class="t-panel-head"><h2>Money in, ${mon}</h2><span class="t-small t-muted">In pounds, refunds and our own transfers left out</span></div>
+    <div class="m-split4">
+      ${part('Jersey income', inc.jersey, 'Salary, Social Security, interest and money from family.', '', '')}
+      ${part('Gîte bookings', inc.gites, inc.gitesEUR ? `${fmt(inc.gitesEUR, 'EUR')} at the rate on each day.` : 'Bookings paid into the French accounts.', '#france', 'France')}
+      ${part('Loans', inc.loans, 'Money borrowed into our accounts.', '', '')}
+      ${part('All money in', inc.jersey + inc.gites + inc.loans, 'Everything above together.', '', '')}
+    </div></section>
+  <section class="t-panel m-top-gap m-inout"><div class="t-panel-head"><h2>Where ${mon}’s money went</h2><span class="t-small t-muted">In pounds, refunds taken off</span></div>
     <div class="m-split4">
       ${part('Jersey living', split.jersey, 'Bills, food, the car, the children and everyday spending.', '#budget', 'Buckets')}
       ${part('Holidays', split.holiday, 'Trips away, and spending in France on holiday dates.', '', '')}
@@ -160,10 +168,7 @@ function overview() {
     <section class="t-panel"><div class="t-panel-head"><h2>Accounts</h2>${showSeg()}</div>
       <ul class="t-list">${bal.rows.map((r) => `<li class="t-row"><div><div class="t-main-line">${esc(r.account.name)}</div><div class="t-meta">${esc(r.account.bank || '')} ${r.account.number_tail ? '••' + esc(r.account.number_tail) : ''} · ${who(r.account.owner)} ${scopeTag(r.account.scope)} ${r.account.anchor ? '' : '<a class="t-tag t-warn" href="#settings" title="The bank file gave no balance. Enter it once in Settings and it stays right.">Balance not set</a>'}</div></div>${amt(r.native, r.account.currency)}</li>`).join('')}</ul></section>
   </div>
-  <div class="t-grid t-2 m-top-gap">
-    <section class="t-panel"><div class="t-panel-head"><h2>Gîtes this year</h2><a class="t-btn t-btn-quiet t-btn-sm" href="#france">France</a></div>
-      <div class="m-split"><div class="t-stat"><span class="t-small t-muted">Money in</span>${amt(frIn, 'EUR', null, { cls: 't-value' })}</div><div class="t-stat"><span class="t-small t-muted">Costs</span>${amt(frOut, 'EUR')}</div><div class="t-stat"><span class="t-small t-muted">Net</span>${amt(frIn + frOut, 'EUR')}</div></div>
-      <p class="t-xs t-faint m-top-gap">In euros as the bank shows them; pounds at the rate on each day.</p></section>
+  <div class="m-top-gap">
     <section class="t-panel"><div class="t-panel-head"><h2>Projects</h2><a class="t-btn t-btn-quiet t-btn-sm" href="#projects">All projects</a></div>
       ${proj.length ? proj.map((r) => `<div class="t-bar-row"><span class="t-main-line">${esc(r.project.name)}</span><span class="t-num t-small">${gbpStr(r.paid)}${r.estimate ? ` of ${gbpStr(r.estimate)}` : ''}</span><div class="t-bar"><span style="width:${r.estimate ? Math.min(100, (r.paid / r.estimate) * 100) : 0}%;background:var(--${r.state === 'over' ? 'fail' : 'accent'})"></span></div></div>`).join('') + '<p class="t-xs t-faint">Paid so far against the estimate, in pounds.</p>' : '<p class="t-muted t-small">No projects on the go.</p>'}</section>
   </div>`;
