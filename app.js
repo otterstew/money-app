@@ -804,4 +804,16 @@ async function boot(msg) {
   refreshRates(false);
 }
 boot();
+// A tab left open keeps running the code it loaded. publish.sh writes
+// version.json; when the tab comes back into view and the live version has
+// changed, reload so the page never mixes old code with new data. Every change
+// is saved as it is made, so a reload loses nothing.
+let builtAs = null;
+const liveVersion = () => fetch('version.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => j?.v || null).catch(() => null);
+liveVersion().then((v) => { builtAs = v; });
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible' || !builtAs) return;
+  const v = await liveVersion();
+  if (v && v !== builtAs) location.reload();
+});
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
