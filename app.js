@@ -8,7 +8,7 @@ import { classify, ruleFromTransaction } from './lib/rules.js';
 import { findTransferPairs } from './lib/transfers.js';
 import { budgetMonth, bucketState } from './lib/buckets.js';
 import { matchReceipt, splitsFromReceipt, receiptCheck } from './lib/receipts.js';
-import { balances, byOwner, pacing, spendByBucket, businessByMonth, budgetBase, heldForOthers } from './lib/summary.js';
+import { balances, byOwner, pacing, spendByBucket, businessByMonth, budgetBase, heldForOthers, spendingSplit } from './lib/summary.js';
 import { projectReport } from './lib/projects.js';
 import { PEOPLE, SCOPES } from './lib/seed.js';
 import * as store from './lib/store.js';
@@ -123,20 +123,31 @@ function overview() {
   // being paid off) and so is money held for someone else.
   const gbpCash = gbpAcc.filter((r) => r.account.kind !== 'loan');
   const held = heldForOthers(new Set(gbpCash.map((r) => r.account.id)), L.txns, L.buckets);
+  // Where the month's money went (Stewart, 25 Nov 2026): Jersey living and
+  // holidays make the headline; renovations and the gîtes sit beside them.
+  const split = spendingSplit(L.txns, L.buckets, ui.month, fx), mon = monthName(ui.month).split(' ')[0];
+  const part = (label, v, note, href, link) => `<div class="t-stat"><span class="t-small t-muted">${label}</span><span class="t-value">${gbpStr(v)}</span><span class="t-xs t-faint">${note}</span>${href ? `<a class="t-xs" href="${href}">${link}</a>` : ''}</div>`;
   const joint = L.settings.jointView === 'half';
   const ow = joint ? { stewart: owners.stewart + owners.joint / 2, trisha: owners.trisha + owners.joint / 2 } : owners;
   const owMax = Math.max(1, ...Object.values(ow));
   return appbar('Overview', monthNav()) + `
   ${toReview.length ? `<a class="t-notice t-warn" href="#review" style="text-decoration:none;margin-bottom:var(--s4)">${icon('review')}<span><strong>${toReview.length} transaction${toReview.length === 1 ? '' : 's'} to review.</strong> Check the bucket and whose it was, and they count in the totals properly.</span></a>` : ''}
   <div class="t-grid t-3">
-    <section class="t-panel t-hero"><span class="t-label">Ready to assign</span><span class="t-value ${b.readyToAssign < 0 ? 't-over' : ''}">${gbpStr(b.readyToAssign)}</span><span class="t-sub">${b.readyToAssign < 0 ? 'More given to buckets or overspent than has come in.' : 'Income not yet given to a bucket.'}</span></section>
-    <section class="t-panel t-hero"><span class="t-label">Spent in ${monthName(ui.month).split(' ')[0]}</span><span class="t-value">${gbpStr(-(b.spent + b.unbucketed))}</span><span class="t-sub">Household and France holiday, in pounds.${b.unbucketed ? ` ${gbpStr(-b.unbucketed)} of it has no bucket yet.` : ''}</span></section>
-    <section class="t-panel t-hero"><span class="t-label">All accounts in pounds</span><span class="t-value">${gbpStr(bal.totalGBP)}</span><span class="t-sub">${rate ? `€1 = £${rate.rate.toFixed(4)}, ${L.settings.fxMode === 'today' ? 'today’s rate' : 'rate on each day'} (${longDate(rate.date)}).` : 'No euro rate yet: euro accounts left out.'}</span></section>
+    <section class="t-panel t-hero"><span class="t-label">Ready to assign</span><span class="t-value ${b.readyToAssign < 0 ? 't-over' : ''}">${gbpStr(b.readyToAssign)}</span><span class="t-sub">${b.readyToAssign < 0 ? 'More given to buckets or overspent than has come in.' : 'NatWest money not yet given to a bucket.'} The French accounts count only once money moves to NatWest.</span></section>
+    <section class="t-panel t-hero"><span class="t-label">Spent in ${mon}</span><span class="t-value">${gbpStr(split.jersey + split.holiday)}</span><span class="t-sub">Jersey living and holidays. Renovations and the gîtes are split out below.${b.unbucketed ? ` ${gbpStr(-b.unbucketed)} has no bucket yet.` : ''}</span></section>
+    <section class="t-panel t-hero"><span class="t-label">All accounts in pounds</span><span class="t-value">${gbpStr(sum(gbpCash, 'native') - held + sum(eurAcc, 'gbp'))}</span><span class="t-sub">Sterling and French together, on the same terms. ${rate ? `€1 = £${rate.rate.toFixed(4)}, ${L.settings.fxMode === 'today' ? 'today’s rate' : 'rate on each day'} (${longDate(rate.date)}).` : 'No euro rate yet: euro accounts left out.'}</span></section>
   </div>
   <div class="t-grid t-2 m-top-gap">
     <section class="t-panel t-hero"><span class="t-label">Sterling accounts</span><span class="t-value">${gbpStr(sum(gbpCash, 'native') - held)}</span><span class="t-sub">NatWest, ${gbpCash.length} account${gbpCash.length === 1 ? '' : 's'}${held > 0 ? `, less ${gbpStr(held)} held for our daughter` : ''}. The loan isn’t counted.</span></section>
-    <section class="t-panel t-hero"><span class="t-label">French accounts in pounds</span><span class="t-value">${gbpStr(sum(eurAcc, 'gbp'))}</span><span class="t-sub">${eurAcc.length ? `CMB, ${fmt(sum(eurAcc, 'native'), 'EUR')} at the same rate.` : 'No French accounts yet.'}${eurUnset ? ` <a href="#settings">${eurUnset === 1 ? 'One balance is' : `${eurUnset} balances are`} not set yet</a>, so this is only the lines brought in.` : ''}</span></section>
+    <section class="t-panel t-hero"><span class="t-label">French accounts in pounds</span><span class="t-value">${gbpStr(sum(eurAcc, 'gbp'))}</span><span class="t-sub">${eurAcc.length ? `CMB, ${fmt(sum(eurAcc, 'native'), 'EUR')} at the same rate. Not in Ready to assign until it moves to NatWest.` : 'No French accounts yet.'}${eurUnset ? ` <a href="#settings">${eurUnset === 1 ? 'One balance is' : `${eurUnset} balances are`} not set yet</a>, so this is only the lines brought in.` : ''}</span></section>
   </div>
+  <section class="t-panel m-top-gap"><div class="t-panel-head"><h2>Where ${mon}’s money went</h2><span class="t-small t-muted">In pounds, refunds taken off</span></div>
+    <div class="m-split4">
+      ${part('Jersey living', split.jersey, 'Bills, food, the car, the children and everyday spending.', '#budget', 'Buckets')}
+      ${part('Holidays', split.holiday, 'Trips away, and spending in France on holiday dates.', '', '')}
+      ${part('Renovations', split.renovations, 'Work on the house, by project.', '#projects', 'Projects')}
+      ${part('Gîte business', split.business, 'Costs of the gîtes, from either bank.', '#france', 'France')}
+    </div></section>
   <div class="t-grid t-2 m-top-gap">
     <section class="t-panel"><div class="t-panel-head"><h2>Spending pace</h2><span class="t-small t-muted">${monthName(ui.month).split(' ')[0]} against ${monthName(addMonths(ui.month, -1)).split(' ')[0]}</span></div><div class="m-chartbox" id="pace"></div></section>
     <section class="t-panel"><div class="t-panel-head"><h2>Whose spending</h2><div class="t-seg" role="group" aria-label="Joint spending"><button data-act="joint" data-v="whole" aria-pressed="${!joint}">Joint apart</button><button data-act="joint" data-v="half" aria-pressed="${joint}">Joint halved</button></div></div>
@@ -232,7 +243,7 @@ function budget() {
   const total = (rs, k) => rs.reduce((s, r) => s + r[k], 0);
   return appbar('Buckets', monthNav()) + `
   <div class="t-grid t-3">
-    <section class="t-panel t-hero"><span class="t-label">Ready to assign</span><span class="t-value ${b.readyToAssign < 0 ? 't-over' : ''}">${gbpStr(b.readyToAssign)}</span></section>
+    <section class="t-panel t-hero"><span class="t-label">Ready to assign</span><span class="t-value ${b.readyToAssign < 0 ? 't-over' : ''}">${gbpStr(b.readyToAssign)}</span><span class="t-sub">NatWest money only. The French accounts count once money moves to NatWest.</span></section>
     <section class="t-panel t-stat"><span class="t-small t-muted">Assigned this month</span><span class="t-value">${gbpStr(b.assigned)}</span><span class="t-small t-muted">Income ${gbpStr(b.income)}</span></section>
     <section class="t-panel t-stat"><span class="t-small t-muted">Spent this month</span><span class="t-value">${gbpStr(-b.spent)}</span><span class="t-small ${b.overspent.length ? 't-over' : 't-muted'}">${b.overspent.length ? `${b.overspent.length} bucket${b.overspent.length === 1 ? '' : 's'} overspent` : 'Nothing overspent'}</span></section>
   </div>
