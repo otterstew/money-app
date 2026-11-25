@@ -8,7 +8,7 @@ import { classify, ruleFromTransaction } from './lib/rules.js';
 import { findTransferPairs } from './lib/transfers.js';
 import { budgetMonth, bucketState } from './lib/buckets.js';
 import { matchReceipt, splitsFromReceipt, receiptCheck } from './lib/receipts.js';
-import { balances, byOwner, pacing, spendByBucket, businessByMonth, budgetBase } from './lib/summary.js';
+import { balances, byOwner, pacing, spendByBucket, businessByMonth, budgetBase, heldForOthers } from './lib/summary.js';
 import { projectReport } from './lib/projects.js';
 import { PEOPLE, SCOPES } from './lib/seed.js';
 import * as store from './lib/store.js';
@@ -119,6 +119,10 @@ function overview() {
   const gbpAcc = bal.rows.filter((r) => r.account.currency === 'GBP'), eurAcc = bal.rows.filter((r) => r.account.currency !== 'GBP');
   const sum = (rs, k) => rs.reduce((s, r) => s + (r[k] || 0), 0);
   const eurUnset = eurAcc.filter((r) => !r.account.anchor).length;
+  // Sterling: our own cash (Stewart, 25 Nov 2026). The loan is left out (it is
+  // being paid off) and so is money held for someone else.
+  const gbpCash = gbpAcc.filter((r) => r.account.kind !== 'loan');
+  const held = heldForOthers(new Set(gbpCash.map((r) => r.account.id)), L.txns, L.buckets);
   const joint = L.settings.jointView === 'half';
   const ow = joint ? { stewart: owners.stewart + owners.joint / 2, trisha: owners.trisha + owners.joint / 2 } : owners;
   const owMax = Math.max(1, ...Object.values(ow));
@@ -130,7 +134,7 @@ function overview() {
     <section class="t-panel t-hero"><span class="t-label">All accounts in pounds</span><span class="t-value">${gbpStr(bal.totalGBP)}</span><span class="t-sub">${rate ? `€1 = £${rate.rate.toFixed(4)}, ${L.settings.fxMode === 'today' ? 'today’s rate' : 'rate on each day'} (${longDate(rate.date)}).` : 'No euro rate yet: euro accounts left out.'}</span></section>
   </div>
   <div class="t-grid t-2 m-top-gap">
-    <section class="t-panel t-hero"><span class="t-label">Sterling accounts</span><span class="t-value">${gbpStr(sum(gbpAcc, 'native'))}</span><span class="t-sub">NatWest, ${gbpAcc.length} account${gbpAcc.length === 1 ? '' : 's'}. A loan counts as money owed.</span></section>
+    <section class="t-panel t-hero"><span class="t-label">Sterling accounts</span><span class="t-value">${gbpStr(sum(gbpCash, 'native') - held)}</span><span class="t-sub">NatWest, ${gbpCash.length} account${gbpCash.length === 1 ? '' : 's'}${held > 0 ? `, less ${gbpStr(held)} held for our daughter` : ''}. The loan isn’t counted.</span></section>
     <section class="t-panel t-hero"><span class="t-label">French accounts in pounds</span><span class="t-value">${gbpStr(sum(eurAcc, 'gbp'))}</span><span class="t-sub">${eurAcc.length ? `CMB, ${fmt(sum(eurAcc, 'native'), 'EUR')} at the same rate.` : 'No French accounts yet.'}${eurUnset ? ` <a href="#settings">${eurUnset === 1 ? 'One balance is' : `${eurUnset} balances are`} not set yet</a>, so this is only the lines brought in.` : ''}</span></section>
   </div>
   <div class="t-grid t-2 m-top-gap">
