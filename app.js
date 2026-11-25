@@ -38,6 +38,7 @@ const P = {
   info: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 16v-4M12 8h.01', warn: 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
   check: 'M20 6 9 17l-5-5', plus: 'M12 5v14M5 12h14', trash: 'M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15',
   tool: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z',
+  family: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21v-1a6 6 0 0 1 12 0v1M16 3.1a4 4 0 0 1 0 7.8M22 21v-1a6 6 0 0 0-4-5.7',
   link: 'M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7',
 };
 const icon = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${P[n]}"/></svg>`;
@@ -68,14 +69,14 @@ async function commit(changes, msg, undo) {
 // ---------- navigation ----------
 const VIEWS = [
   ['overview', 'Overview', 'home'], ['review', 'To review', 'review'], ['budget', 'Buckets', 'budget'], ['txns', 'Transactions', 'list'],
-  ['import', 'Import', 'upload'], ['receipts', 'Receipts', 'receipt'], ['projects', 'Projects', 'tool'], ['france', 'France', 'france'], ['settings', 'Settings', 'settings'],
+  ['import', 'Import', 'upload'], ['receipts', 'Receipts', 'receipt'], ['projects', 'Projects', 'tool'], ['family', 'Family', 'family'], ['france', 'France', 'france'], ['settings', 'Settings', 'settings'],
 ];
 const PHONE = ['overview', 'review', 'budget', 'txns', 'more'];
 function nav() {
   const n = L.txns.filter((t) => t.status === 'review').length;
   const badge = (id) => (id === 'review' && n ? `<span class="t-badge" aria-label="${n} to review">${n > 99 ? '99+' : n}</span>` : '');
   $('#rail').innerHTML = `<div class="t-brand">Money</div>` + VIEWS.map(([id, l, i]) => `<a href="#${id}" ${ui.view === id ? 'aria-current="page"' : ''}>${icon(i)}${l}${badge(id)}</a>`).join('');
-  const moreOn = ['import', 'receipts', 'projects', 'france', 'settings', 'more'].includes(ui.view);
+  const moreOn = ['import', 'receipts', 'projects', 'family', 'france', 'settings', 'more'].includes(ui.view);
   $('#tabs').innerHTML = PHONE.map((id) => {
     const v = VIEWS.find((x) => x[0] === id) || ['more', 'More', 'more'];
     const cur = id === 'more' ? moreOn : ui.view === id;
@@ -86,7 +87,7 @@ window.addEventListener('hashchange', () => { ui.view = location.hash.slice(1) |
 
 function render() {
   nav();
-  const v = { overview, review, budget, txns, import: importView, receipts, projects, france, settings, more }[ui.view] || overview;
+  const v = { overview, review, budget, txns, import: importView, receipts, projects, family, france, settings, more }[ui.view] || overview;
   $('#main').innerHTML = v();
   after[ui.view]?.();
 }
@@ -111,7 +112,7 @@ function overview() {
   const toReview = L.txns.filter((t) => t.status === 'review');
   const rate = latestRate(L.settings.rates, 'EUR');
   const flagged = b.rows.filter((r) => ['over', 'under'].includes(bucketState(r))).sort((a, c) => a.available - c.available).slice(0, 6);
-  const proj = L.projects.filter((p) => !p.done).map((p) => projectReport(p, L.txns, fxo()));
+  const proj = L.projects.filter((p) => !p.done && !isFamily(p)).map((p) => projectReport(p, L.txns, fxo()));
   // The two banks side by side (Stewart, 25 Nov 2026): sterling at NatWest, and
   // the French accounts in pounds so the two can be read together.
   const gbpAcc = bal.rows.filter((r) => r.account.currency === 'GBP'), eurAcc = bal.rows.filter((r) => r.account.currency !== 'GBP');
@@ -214,7 +215,10 @@ function bucketOptions(sel, scope) {
   }
   return `<option value="">Choose a bucket</option>` + Object.entries(groups).map(([g, bs]) => `<optgroup label="${esc(g)}">${bs.map((b) => `<option value="${b.id}" ${b.id === sel ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</optgroup>`).join('');
 }
-const projectOptions = (sel) => `<option value="">No project</option>` + L.projects.map((p) => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+const projectOptions = (sel) => {
+  const opt = (p) => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.name)}</option>`;
+  return `<option value="">No project</option><optgroup label="Renovations">${L.projects.filter((p) => !isFamily(p)).map(opt).join('')}</optgroup><optgroup label="Family: trips and university">${L.projects.filter(isFamily).map(opt).join('')}</optgroup>`;
+};
 const whoSeg = (id, cur) => `<div class="t-seg" role="group" aria-label="Whose">${PEOPLE.map((p) => `<button data-act="who" data-id="${id}" data-v="${p.id}" aria-pressed="${cur === p.id}">${p.name}</button>`).join('')}</div>`;
 const scopeSelect = (id, cur, acc) => acc?.scope === 'business'
   ? `<label class="t-field"><span>Kind</span><select class="t-select" data-act="scope" data-id="${id}">${SCOPES.map((s) => `<option value="${s.id}" ${s.id === cur ? 'selected' : ''}>${s.name}</option>`).join('')}</select></label>` : '';
@@ -491,18 +495,30 @@ function saveReceipt(id) {
 // ---------- projects ----------
 // Each project: the estimate item by item, what has been paid against it, and
 // every payment (bank lines tagged with the project, and costs paid elsewhere).
-function projects() {
-  const list = [...L.projects].sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0));
+// Projects are the house renovations; Family holds trips and the children's
+// university costs, itemised the same way (Stewart, 25 Nov 2026). A project
+// with kind 'family' belongs on Family; anything else is a renovation.
+const isFamily = (p) => p.kind === 'family';
+const projects = () => projectsPage('renovation');
+const family = () => projectsPage('family');
+function projectsPage(kind) {
+  const fam = kind === 'family';
+  const list = L.projects.filter((p) => isFamily(p) === fam).sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0) || (b.started || '').localeCompare(a.started || ''));
   const reps = list.map((p) => projectReport(p, L.txns, fxo()));
-  const live = reps.filter((r) => !r.project.done);
+  // Renovations count what is on the go; Family counts everything, finished
+  // trips included, so the year's trips and university costs add up.
+  const live = fam ? reps : reps.filter((r) => !r.project.done);
   const totE = live.reduce((s, r) => s + r.estimate, 0), totP = live.reduce((s, r) => s + r.paid, 0);
-  return appbar('Projects', `<button class="t-btn t-btn-primary" data-act="new-project">${icon('plus')}Add a project</button>`) + `
+  const year = todayISO().slice(0, 4);
+  return appbar(fam ? 'Family' : 'Projects', `<button class="t-btn t-btn-primary" data-act="new-project" data-kind="${kind}">${icon('plus')}${fam ? 'Add a trip or course' : 'Add a project'}</button>`) + `
+  ${fam ? '<p class="t-small t-muted" style="margin-bottom:var(--s4)">Trips and the children’s university costs, each itemised with its own total. House renovations are on Projects.</p>' : ''}
   <div class="t-grid t-3">
-    <section class="t-panel t-hero"><span class="t-label">Paid so far</span><span class="t-value">${gbpStr(totP)}</span><span class="t-sub">Across ${live.length} project${live.length === 1 ? '' : 's'} on the go.</span></section>
+    <section class="t-panel t-hero"><span class="t-label">Paid so far</span><span class="t-value">${gbpStr(totP)}</span><span class="t-sub">${fam ? `Across ${live.length} trip${live.length === 1 ? '' : 's'} and course${live.length === 1 ? '' : 's'}.` : `Across ${live.length} project${live.length === 1 ? '' : 's'} on the go.`}</span></section>
     <section class="t-panel t-stat"><span class="t-small t-muted">Estimated</span><span class="t-value">${gbpStr(totE)}</span></section>
-    <section class="t-panel t-stat"><span class="t-small t-muted">${totP > totE && totE ? 'Over the estimate by' : 'Still to pay'}</span><span class="t-value ${totP > totE && totE ? 't-over' : ''}">${gbpStr(Math.abs(totE - totP))}</span></section>
+    <section class="t-panel t-stat"><span class="t-small t-muted">${totP > totE && totE ? 'Over the estimate by' : 'Still to pay'}</span><span class="t-value ${totP > totE && totE ? 't-over' : ''}">${totE ? gbpStr(Math.abs(totE - totP)) : '–'}</span>${totE ? '' : '<span class="t-xs t-faint">Add estimates to see what is left.</span>'}</section>
   </div>
-  <p class="t-small t-muted m-top-gap">Tag a bank line with a project when you review it, or split a receipt across projects. Pick the item it paid for below. Anything paid another way (cash, a card not brought in here) goes in with “Add a payment”.</p>
+  ${reps.length ? '' : `<section class="t-panel t-empty m-top-gap"><h3>Nothing here yet</h3><p>${fam ? 'Add a trip or a university course, then tag its bank lines with it when you review them.' : 'Add a project, then tag its bank lines with it when you review them.'}</p></section>`}
+  <p class="t-small t-muted m-top-gap">Tag a bank line with a ${fam ? 'trip or course' : 'project'} when you review it, or split a receipt across projects. Pick the item it paid for below. Anything paid another way (cash, a card not brought in here) goes in with “Add a payment”.</p>
   <div class="m-proj m-top-gap">${reps.map(projectPanel).join('')}</div>`;
 }
 function projectPanel(r) {
@@ -512,8 +528,8 @@ function projectPanel(r) {
   return `<section class="t-panel" id="proj-${p.id}"><div class="t-panel-head"><div><h2>${esc(p.name)}${p.done ? ' <span class="t-tag t-ok">Finished</span>' : ''}</h2>${p.note ? `<p class="t-small t-muted">${esc(p.note)}</p>` : ''}</div>
       <div class="t-actions"><button class="t-btn t-btn-secondary t-btn-sm" data-act="edit-project" data-id="${p.id}">Edit estimate</button><button class="t-btn t-btn-quiet t-btn-sm" data-act="new-payment" data-id="${p.id}">${icon('plus')}Add a payment</button></div></div>
     <div class="m-split"><div class="t-stat"><span class="t-small t-muted">Estimate</span><span class="t-value">${r.estimate ? gbpStr(r.estimate) : '–'}</span></div><div class="t-stat"><span class="t-small t-muted">Paid</span><span class="t-value">${gbpStr(r.paid)}</span></div><div class="t-stat"><span class="t-small t-muted">${leftLabel}</span><span class="t-value ${r.state === 'over' ? 't-over' : ''}">${r.estimate ? gbpStr(Math.abs(r.left)) : '–'}</span></div></div>
-    ${r.estimate ? `<div class="t-meter m-top-gap" data-state="${r.state}" role="img" aria-label="${Math.round((r.share || 0) * 100)}% of the estimate paid"><span style="width:${Math.min(100, (r.share || 0) * 100)}%"></span></div>` : `<div class="t-notice m-top-gap">${icon('info')}<span>No estimate yet. “Edit estimate” to list what it needs and what you think each part will cost.</span></div>`}
-    ${items.length || r.unplanned ? `<div class="t-table-wrap m-top-gap"><table class="t-table"><thead><tr><th>Item</th><th class="t-r">Estimate</th><th class="t-r">Paid</th><th class="t-r">Left</th></tr></thead><tbody>
+    ${r.estimate ? `<div class="t-meter m-top-gap" data-state="${r.state}" role="img" aria-label="${Math.round((r.share || 0) * 100)}% of the estimate paid"><span style="width:${Math.min(100, (r.share || 0) * 100)}%"></span></div>` : p.done ? '' : `<div class="t-notice m-top-gap">${icon('info')}<span>No estimate yet. “Edit estimate” to list what it needs and what you think each part will cost.</span></div>`}
+    ${items.length ? `<div class="t-table-wrap m-top-gap"><table class="t-table"><thead><tr><th>Item</th><th class="t-r">Estimate</th><th class="t-r">Paid</th><th class="t-r">Left</th></tr></thead><tbody>
       ${r.rows.map((x) => `<tr><td>${esc(x.item.name)}${x.item.note ? `<div class="t-xs t-faint">${esc(x.item.note)}</div>` : ''}</td><td class="t-r t-num">${x.estimate ? gbpStr(x.estimate) : '–'}</td><td class="t-r t-num">${gbpStr(x.paid)}</td><td class="t-r">${x.estimate ? `<span class="t-avail" data-state="${x.over ? 'over' : 'ok'}">${x.over ? 'Over ' : ''}${gbpStr(Math.abs(x.left))}</span>` : '–'}</td></tr>`).join('')}
       ${r.unplanned ? `<tr><td>Not linked to an item<div class="t-xs t-faint">Pick the item in Payments below.</div></td><td class="t-r t-num">–</td><td class="t-r t-num">${gbpStr(r.unplanned)}</td><td class="t-r">–</td></tr>` : ''}
     </tbody><tfoot><tr><td>Total</td><td class="t-r t-num">${gbpStr(r.estimate)}</td><td class="t-r t-num">${gbpStr(r.paid)}</td><td class="t-r t-num">${r.estimate ? (r.left < 0 ? 'Over ' : '') + gbpStr(Math.abs(r.left)) : '–'}</td></tr></tfoot></table></div>` : ''}
@@ -524,21 +540,21 @@ function projectPanel(r) {
     </details></section>`;
 }
 const pItemRow = (it = {}) => `<div class="m-pline" data-pi="${it.id || ''}"><input class="t-input" data-p="name" placeholder="What, e.g. Units and worktop" value="${esc(it.name || '')}" aria-label="Item"><input class="t-input t-num" data-p="estimate" inputmode="decimal" placeholder="0.00" value="${it.estimate ? (it.estimate / 100).toFixed(2) : ''}" aria-label="Estimate in pounds"><button class="t-icon-btn" data-act="del-pitem" aria-label="Remove this item">${icon('trash')}</button></div>`;
-function projectSheet(id) {
-  const p = id ? L.projects.find((x) => x.id === id) : { name: '', note: '', items: [], done: false };
-  sheet(id ? `${esc(p.name)}: estimate` : 'Add a project', `<div class="t-form">
+function projectSheet(id, kind = 'renovation') {
+  const p = id ? L.projects.find((x) => x.id === id) : { name: '', note: '', items: [], done: false, kind };
+  sheet(id ? `${esc(p.name)}: estimate` : (kind === 'family' ? 'Add a trip or course' : 'Add a project'), `<div class="t-form">
     <label class="t-field"><span>Name</span><input class="t-input" id="p-name" value="${esc(p.name)}"></label>
     <label class="t-field"><span>Note</span><input class="t-input" id="p-note" value="${esc(p.note || '')}"></label>
     <div class="t-field"><span>What it needs, and what you think each part will cost (pounds)</span><div class="m-lines" id="pitems">${(p.items?.length ? p.items : [{}]).map(pItemRow).join('')}</div>
       <div class="t-actions"><button class="t-btn t-btn-secondary t-btn-sm" data-act="add-pitem">${icon('plus')}Add an item</button><span class="t-help" id="p-total"></span></div></div>
     ${id ? `<label class="t-check"><input type="checkbox" id="p-done" ${p.done ? 'checked' : ''}>Finished (kept, but off the overview)</label>` : ''}
-    <div class="t-actions"><button class="t-btn t-btn-primary" data-act="save-project" data-id="${id || ''}">Save</button><button class="t-btn t-btn-secondary" data-act="close">Cancel</button></div></div>`);
+    <div class="t-actions"><button class="t-btn t-btn-primary" data-act="save-project" data-id="${id || ''}" data-kind="${p.kind || 'renovation'}">Save</button><button class="t-btn t-btn-secondary" data-act="close">Cancel</button></div></div>`);
   const total = () => { if (!$('#p-total')) return; const t = [...document.querySelectorAll('#pitems [data-p=estimate]')].reduce((s, el) => s + (parseAmount(el.value) || 0), 0); $('#p-total').textContent = `Estimate ${gbpStr(t)}`; };
   $('#sheet').addEventListener('input', total); total();
 }
-function saveProject(id) {
+function saveProject(id, kind = 'renovation') {
   const name = $('#p-name').value.trim(); if (!name) { toast('A project needs a name.'); return; }
-  const p = id ? L.projects.find((x) => x.id === id) : { id: 'p-' + uid().slice(0, 8), started: todayISO(), budget: null, payments: [] };
+  const p = id ? L.projects.find((x) => x.id === id) : { id: 'p-' + uid().slice(0, 8), started: todayISO(), budget: null, payments: [], ...(kind === 'family' ? { kind } : {}) };
   const was = id ? JSON.parse(JSON.stringify(p)) : null;
   p.name = name; p.note = $('#p-note').value.trim(); p.done = !!$('#p-done')?.checked;
   p.items = [...document.querySelectorAll('#pitems .m-pline')].map((r) => ({ id: r.dataset.pi || 'i-' + uid().slice(0, 8), name: r.querySelector('[data-p=name]').value.trim(), estimate: parseAmount(r.querySelector('[data-p=estimate]').value) || 0 }))
@@ -626,7 +642,7 @@ function settings() {
     <div class="t-actions m-top-gap"><button class="t-btn t-btn-primary" data-act="save-buckets">Save buckets</button></div></section>
   <div class="t-grid t-2 m-top-gap">
   <section class="t-panel"><h2>Rules</h2><p class="t-small t-muted">Made when you tick “Always” in review. Auto rules file silently; the others only suggest.</p><ul class="t-list">${L.rules.map((r) => `<li class="t-row"><div><div class="t-main-line">${esc(r.match.value || 'everything')}${r.match.direction ? (r.match.direction === 'in' ? ' (money in)' : ' (money out)') : ''}</div><div class="t-meta">→ ${esc(bucket(r.set.bucket_id)?.name || '')} ${r.set.owner ? who(r.set.owner) : ''} ${r.set.scope ? esc(r.set.scope) : ''}</div></div><div class="t-actions"><label class="t-check"><input type="checkbox" data-act="rule-auto" data-id="${r.id}" ${r.auto ? 'checked' : ''}>Auto</label><button class="t-icon-btn" data-act="del-rule" data-id="${r.id}" aria-label="Delete rule">${icon('trash')}</button></div></li>`).join('')}</ul></section>
-  <section class="t-panel"><div class="t-panel-head"><h2>Projects</h2><a class="t-btn t-btn-secondary t-btn-sm" href="#projects">Open projects</a></div><ul class="t-list">${L.projects.map((p) => `<li class="t-row"><div><div class="t-main-line">${esc(p.name)}</div><div class="t-meta">${esc(p.note || '')}${p.done ? ' · Finished' : ''}</div></div></li>`).join('')}</ul></section>
+  <section class="t-panel"><div class="t-panel-head"><h2>Projects</h2><a class="t-btn t-btn-secondary t-btn-sm" href="#projects">Open projects</a></div><ul class="t-list">${L.projects.map((p) => `<li class="t-row"><div><div class="t-main-line">${esc(p.name)}</div><div class="t-meta">${esc(p.note || '')}${isFamily(p) ? ' · Family' : ''}${p.done ? ' · Finished' : ''}</div></div></li>`).join('')}</ul></section>
   </div>`;
 }
 function more() {
@@ -690,9 +706,9 @@ document.addEventListener('click', (e) => {
     case 'save-buckets': saveTable('bk', L.buckets, 'b', 'buckets'); break;
     case 'new-account': { const n = { id: uid(), name: 'New account', bank: '', currency: 'GBP', kind: 'current', owner: 'joint', scope: 'household', number_tail: null, opening: 0, anchor: null }; L.accounts.push(n); commit({ accounts: { upsert: [n] } }); break; }
     case 'new-bucket': { const n = { id: 'b-' + uid().slice(0, 8), name: 'New bucket', group: 'Everyday', kind: 'spend', target: null, rollover: true, archived: false }; L.buckets.push(n); commit({ buckets: { upsert: [n] } }); break; }
-    case 'new-project': projectSheet(); break;
+    case 'new-project': projectSheet(null, el.dataset.kind); break;
     case 'edit-project': projectSheet(id); break;
-    case 'save-project': saveProject(id); break;
+    case 'save-project': saveProject(id, el.dataset.kind); break;
     case 'add-pitem': $('#pitems').insertAdjacentHTML('beforeend', pItemRow()); $('#pitems .m-pline:last-child input').focus(); break;
     case 'del-pitem': el.closest('.m-pline').remove(); $('#sheet').dispatchEvent(new Event('input')); break;
     case 'new-payment': paymentSheet(id); break;
