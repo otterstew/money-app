@@ -765,12 +765,21 @@ function saveHoliday() {
   L.holidays.push(h); const n = reclassifyFrench(); closeSheet();
   commit({ holidays: { upsert: [h] }, txns: { upsert: L.txns.filter((t) => acct(t.account_id)?.scope === 'business') } }, `Holiday added${n ? `: ${n} line${n === 1 ? '' : 's'} now count as holiday` : ''}`);
 }
-// Re-run the defaults on French lines a person has not set by hand.
+// Re-run the defaults on French lines a person has not set by hand. Transfers
+// between our own accounts are left alone: they are not spending, and re-running
+// them sent filed transfers back to review (25 Nov 2026, after a balance was set
+// in Settings). A line whose status is locked keeps its question; one filed by
+// an auto rule stays filed, as in tools/plan.js.
 function reclassifyFrench() {
   let n = 0;
   for (const t of L.txns) {
-    const a = acct(t.account_id); if (a?.scope !== 'business' || (t.locked || []).includes('scope')) continue;
-    const before = t.scope; t.flag = null; classify(t, { account: a, holidays: L.holidays, rules: L.rules });
+    const a = acct(t.account_id), locked = t.locked || [];
+    if (a?.scope !== 'business' || t.transfer_id || t.status === 'void' || locked.includes('scope')) continue;
+    const before = t.scope;
+    if (!locked.includes('status')) t.flag = null;
+    classify(t, { account: a, holidays: L.holidays, rules: L.rules });
+    const r = L.rules.find((x) => x.id === t.rule_id);
+    if (!locked.includes('status') && r?.auto && (t.bucket_id || t.splits)) { t.status = 'done'; t.flag = null; }
     if (t.scope === 'holiday' && before !== 'holiday') n++;
   }
   return n;
