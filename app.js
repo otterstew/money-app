@@ -8,7 +8,7 @@ import { classify, ruleFromTransaction } from './lib/rules.js';
 import { findTransferPairs } from './lib/transfers.js';
 import { budgetMonth, bucketState } from './lib/buckets.js';
 import { matchReceipt, splitsFromReceipt, receiptCheck } from './lib/receipts.js';
-import { balances, byOwner, pacing, spendByBucket, businessByMonth } from './lib/summary.js';
+import { balances, byOwner, pacing, spendByBucket, businessByMonth, budgetBase } from './lib/summary.js';
 import { projectReport } from './lib/projects.js';
 import { PEOPLE, SCOPES } from './lib/seed.js';
 import * as store from './lib/store.js';
@@ -105,7 +105,7 @@ function showSeg() {
 function overview() {
   if (!L.txns.length) return appbar('Overview') + `<section class="t-panel t-empty"><h3>Nothing here yet</h3><p>Download a statement from NatWest International or CMB (OFX, QIF or CSV) and bring it in.</p><div class="t-actions"><a class="t-btn t-btn-primary" href="#import">${icon('upload')}Import a statement</a></div></section>`;
   const fx = fxo();
-  const b = budgetMonth({ txns: L.txns, buckets: L.buckets, allocations: L.allocations, month: ui.month, fx });
+  const b = budgetMonth({ txns: L.txns, buckets: L.buckets, allocations: L.allocations, month: ui.month, fx, ...budgetBase(L.accounts, L.txns, fx) });
   const bal = balances(L.accounts, L.txns, fx);
   const owners = byOwner(L.txns, ui.month, fx);
   const toReview = L.txns.filter((t) => t.status === 'review');
@@ -114,15 +114,24 @@ function overview() {
   const proj = L.projects.filter((p) => !p.done).map((p) => projectReport(p, L.txns, fxo()));
   const fr = businessByMonth(L.txns, ui.month.slice(0, 4), { ...fx, mode: 'day' });
   const frIn = fr.reduce((s, r) => s + r.in, 0), frOut = fr.reduce((s, r) => s + r.out, 0);
+  // The two banks side by side (Stewart, 25 Nov 2026): sterling at NatWest, and
+  // the French accounts in pounds so the two can be read together.
+  const gbpAcc = bal.rows.filter((r) => r.account.currency === 'GBP'), eurAcc = bal.rows.filter((r) => r.account.currency !== 'GBP');
+  const sum = (rs, k) => rs.reduce((s, r) => s + (r[k] || 0), 0);
+  const eurUnset = eurAcc.filter((r) => !r.account.anchor).length;
   const joint = L.settings.jointView === 'half';
   const ow = joint ? { stewart: owners.stewart + owners.joint / 2, trisha: owners.trisha + owners.joint / 2 } : owners;
   const owMax = Math.max(1, ...Object.values(ow));
   return appbar('Overview', monthNav()) + `
   ${toReview.length ? `<a class="t-notice t-warn" href="#review" style="text-decoration:none;margin-bottom:var(--s4)">${icon('review')}<span><strong>${toReview.length} transaction${toReview.length === 1 ? '' : 's'} to review.</strong> Check the bucket and whose it was, and they count in the totals properly.</span></a>` : ''}
   <div class="t-grid t-3">
-    <section class="t-panel t-hero"><span class="t-label">Ready to assign</span><span class="t-value ${b.readyToAssign < 0 ? 't-over' : ''}">${gbpStr(b.readyToAssign)}</span><span class="t-sub">${b.readyToAssign < 0 ? 'More assigned than has come in. Take some back from a bucket.' : 'Income not yet given to a bucket.'}</span></section>
+    <section class="t-panel t-hero"><span class="t-label">Ready to assign</span><span class="t-value ${b.readyToAssign < 0 ? 't-over' : ''}">${gbpStr(b.readyToAssign)}</span><span class="t-sub">${b.readyToAssign < 0 ? 'More given to buckets or overspent than has come in.' : 'Income not yet given to a bucket.'}</span></section>
     <section class="t-panel t-hero"><span class="t-label">Spent in ${monthName(ui.month).split(' ')[0]}</span><span class="t-value">${gbpStr(-(b.spent + b.unbucketed))}</span><span class="t-sub">Household and France holiday, in pounds.${b.unbucketed ? ` ${gbpStr(-b.unbucketed)} of it has no bucket yet.` : ''}</span></section>
     <section class="t-panel t-hero"><span class="t-label">All accounts in pounds</span><span class="t-value">${gbpStr(bal.totalGBP)}</span><span class="t-sub">${rate ? `€1 = £${rate.rate.toFixed(4)}, ${L.settings.fxMode === 'today' ? 'today’s rate' : 'rate on each day'} (${longDate(rate.date)}).` : 'No euro rate yet: euro accounts left out.'}</span></section>
+  </div>
+  <div class="t-grid t-2 m-top-gap">
+    <section class="t-panel t-hero"><span class="t-label">Sterling accounts</span><span class="t-value">${gbpStr(sum(gbpAcc, 'native'))}</span><span class="t-sub">NatWest, ${gbpAcc.length} account${gbpAcc.length === 1 ? '' : 's'}. A loan counts as money owed.</span></section>
+    <section class="t-panel t-hero"><span class="t-label">French accounts in pounds</span><span class="t-value">${gbpStr(sum(eurAcc, 'gbp'))}</span><span class="t-sub">${eurAcc.length ? `CMB, ${fmt(sum(eurAcc, 'native'), 'EUR')} at the same rate.` : 'No French accounts yet.'}${eurUnset ? ` <a href="#settings">${eurUnset === 1 ? 'One balance is' : `${eurUnset} balances are`} not set yet</a>, so this is only the lines brought in.` : ''}</span></section>
   </div>
   <div class="t-grid t-2 m-top-gap">
     <section class="t-panel"><div class="t-panel-head"><h2>Spending pace</h2><span class="t-small t-muted">${monthName(ui.month).split(' ')[0]} against ${monthName(addMonths(ui.month, -1)).split(' ')[0]}</span></div><div class="m-chartbox" id="pace"></div></section>
@@ -213,7 +222,7 @@ function review() {
 
 // ---------- budget ----------
 function budget() {
-  const b = budgetMonth({ txns: L.txns, buckets: L.buckets, allocations: L.allocations, month: ui.month, fx: fxo() });
+  const b = budgetMonth({ txns: L.txns, buckets: L.buckets, allocations: L.allocations, month: ui.month, fx: fxo(), ...budgetBase(L.accounts, L.txns, fxo()) });
   const groups = {};
   b.rows.filter((r) => r.bucket.kind === 'spend').forEach((r) => (groups[r.bucket.group] ||= []).push(r));
   const total = (rs, k) => rs.reduce((s, r) => s + r[k], 0);

@@ -34,6 +34,10 @@
 .m-kv dt{color:var(--ink-3)} .m-kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .m-chartbox{position:relative}
 .m-top-gap{margin-top:var(--s4)}
+/* A big figure shrinks to fit its box (three across on a laptop cut off
+   "£55,862.04"), never past the design's hero size. */
+.t-hero{container-type:inline-size;min-width:0}
+.t-hero .t-value{font-size:min(var(--t-hero),14cqi);overflow-wrap:anywhere}
 .m-split{display:flex;flex-wrap:wrap;gap:var(--s4) var(--s8)}
 .m-proj{display:grid;gap:var(--s4)}
 .m-proj .t-panel-head{flex-wrap:wrap;gap:var(--s2) var(--s3)}
