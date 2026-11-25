@@ -35,6 +35,13 @@
 .m-chartbox{position:relative}
 .m-top-gap{margin-top:var(--s4)}
 .m-split{display:flex;flex-wrap:wrap;gap:var(--s4) var(--s8)}
+.m-proj{display:grid;gap:var(--s4)}
+.m-proj .t-panel-head{flex-wrap:wrap;gap:var(--s2) var(--s3)}
+.m-proj .t-panel-head>div:first-child{flex:1 1 14em;min-width:0}
+.m-pline{display:grid;grid-template-columns:minmax(0,1fr) 110px auto;gap:var(--s2);align-items:center}
+.m-pay-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s2) var(--s3);align-items:center}
+.m-pay-row>.t-select{grid-column:1/-1;grid-row:2}
+@media (min-width:720px){.m-pay-row{grid-template-columns:minmax(0,1fr) minmax(0,14em) auto}.m-pay-row>.t-select{grid-column:auto;grid-row:auto}}
 </style>
 </head>
 <body>
